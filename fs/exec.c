@@ -63,6 +63,9 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1904,12 +1907,55 @@ out_ret:
 	return retval;
 }
 
+#ifdef CONFIG_KSU_SUSFS
+extern struct static_key_true ksu_su_compat_enabled;
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+extern bool __ksu_is_allow_uid_for_current(uid_t uid);
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+			void *envp, int *flags);
+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags);
+extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags, int *retval);
+#endif
+
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
+#ifdef CONFIG_KSU_SUSFS
+	bool is_su_session = false;
+	int retval;
+
+	if (IS_ERR(filename))
+		return PTR_ERR(filename);
+	if (!filename)
+		return -EFAULT;
+
+	if (!susfs_is_current_proc_no_su() &&
+	    static_branch_likely(&ksu_su_compat_enabled)) {
+		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted))
+			is_su_session = !ksu_handle_execveat(&fd, &filename, &argv,
+							    &envp, &flags);
+		else
+			is_su_session = !ksu_handle_execveat_sucompat(&fd, &filename,
+							    &argv, &envp, &flags);
+	}
+
+	/* Unlike 5.10 bprm_execve, __do_execve_file consumes filename. */
+	if (is_su_session)
+		filename->refcnt++;
+	retval = __do_execve_file(fd, filename, argv, envp, flags, NULL);
+	if (is_su_session) {
+		ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp,
+						&flags, &retval);
+		putname(filename);
+	}
+	return retval;
+#else
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
+#endif
 }
 
 int do_execve_file(struct file *file, void *__argv, void *__envp)

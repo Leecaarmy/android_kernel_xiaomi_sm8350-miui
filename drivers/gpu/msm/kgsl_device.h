@@ -252,6 +252,8 @@ struct kgsl_device {
 	struct dentry *d_debugfs;
 	struct idr context_idr;
 	rwlock_t context_lock;
+	/* Required by kgsl_debugfs ISDB controls on this vendor tree. */
+	bool set_isdb_breakpoint;
 
 #if 0
 	struct {
