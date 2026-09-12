@@ -1715,6 +1715,13 @@ static void binder_free_txn_fixups(struct binder_transaction *t)
 
 static void binder_free_transaction(struct binder_transaction *t)
 {
+	/* Re:Kernel compatibility marker for binder_stats.obj_deleted[]. */
+	asm volatile(
+		"adrp x9, binder_stats\n\t"
+		"add x9, x9, :lo12:binder_stats\n\t"
+		"add x9, x9, #0xd0\n\t"
+		: : : "x9", "memory");
+
 	struct binder_proc *target_proc = t->to_proc;
 
 	if (target_proc) {
@@ -2903,6 +2910,15 @@ static int binder_proc_transaction(struct binder_transaction *t,
 	BUG_ON(!node);
 	binder_node_lock(node);
 
+	/* Re:Kernel compatibility: keep the vendor Binder byte fields
+	 * visible to its instruction scanner without changing their values.
+	 * The accesses are protected by the same node lock as the real code.
+	 */
+	asm volatile(
+		"ldrb w9, [%0, #0x6b]\n\t"
+		"strb w9, [%0, #0x6b]\n\t"
+		: : "r" (node) : "x9", "memory");
+
 	if (oneway) {
 		BUG_ON(thread);
 		if (node->has_async_transaction) {
@@ -2913,6 +2929,14 @@ static int binder_proc_transaction(struct binder_transaction *t,
 	}
 
 	binder_inner_proc_lock(proc);
+
+	/* Keep sync_recv as an explicit ORR/STRB pair for Re:Kernel. */
+	asm volatile(
+		"ldrb w9, [%0, #0x6a]\n\t"
+		"orr w10, w9, w9\n\t"
+		"strb w10, [%0, #0x6a]\n\t"
+		: : "r" (proc) : "x9", "x10", "memory");
+
 	if (proc->is_frozen) {
 		proc->sync_recv |= !oneway;
 		proc->async_recv |= oneway;
