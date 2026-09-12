@@ -1719,7 +1719,7 @@ static void binder_free_transaction(struct binder_transaction *t)
 	asm volatile(
 		"adrp x9, binder_stats\n\t"
 		"add x9, x9, :lo12:binder_stats\n\t"
-		"add x9, x9, #0xd0\n\t"
+		"add x9, x9, #0xcc\n\t"
 		: : : "x9", "memory");
 
 	struct binder_proc *target_proc = t->to_proc;
