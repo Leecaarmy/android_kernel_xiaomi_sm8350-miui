@@ -190,3 +190,5 @@ obj-$(CONFIG_NXP_SR100)         += uwb-sr100/
 obj-y                           += fragmention/
 obj-$(CONFIG_MIHW)				+= mihw/
 obj-$(CONFIG_KSU)		+= kernelsu/
+
+obj-$(CONFIG_REKERNEL_X)	+= rekernel_x/

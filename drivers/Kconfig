@@ -199,6 +199,7 @@ source "drivers/ras/Kconfig"
 source "drivers/thunderbolt/Kconfig"
 
 source "drivers/android/Kconfig"
+source "drivers/rekernel_x/Kconfig"
 
 source "drivers/gpu/trace/Kconfig"
 

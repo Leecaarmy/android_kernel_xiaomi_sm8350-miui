@@ -1,0 +1,10 @@
+config REKERNEL_X
+	tristate "ReKernel-X support"
+	depends on ANDROID_BINDER_IPC
+	depends on NETFILTER
+	depends on KPROBES
+	default n
+	help
+	  Enable the in-kernel ReKernel-X hooks used by NoActive.
+	  This provides Binder, signal and network events through the
+	  rekernel_x2 Generic Netlink family.
