@@ -1391,6 +1391,7 @@ static int sdhci_msm_hs400_dll_calibration(struct sdhci_host *host)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	int ret;
 	struct mmc_host *mmc = host->mmc;
+	u32 config;
 	const struct sdhci_msm_offset *msm_offset =
 					msm_host->offset;
 
