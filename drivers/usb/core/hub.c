@@ -5882,6 +5882,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 	struct usb_hcd			*hcd = bus_to_hcd(udev->bus);
 	struct usb_device_descriptor	descriptor = udev->descriptor;
 	struct usb_host_bos		*bos;
+	struct usb_interface		*intf;
 	char				buf[50];
 	int				i, j, ret = 0;
 	int				port1 = udev->portnum;
