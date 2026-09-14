@@ -82,7 +82,8 @@ struct usbnet {
 #		define EVENT_DEVICE_REPORT_IDLE	8
 #		define EVENT_NO_RUNTIME_PM	9
 #		define EVENT_RX_KILL	10
-#		define EVENT_LINK_CHANGE	11
+	#		define EVENT_LINK_CHANGE	11
+	#		define EVENT_LINK_CARRIER_ON	14
 #		define EVENT_SET_RX_MODE	12
 #		define EVENT_NO_IP_ALIGN	13
 	/* rx_speed and tx_speed are in bps - NOT Mbps */

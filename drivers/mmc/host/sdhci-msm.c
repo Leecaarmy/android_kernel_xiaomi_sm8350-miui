@@ -608,6 +608,7 @@ static inline int msm_dll_poll_ck_out_en(struct sdhci_host *host, u8 poll)
 	struct mmc_host *mmc = host->mmc;
 	const struct sdhci_msm_offset *msm_offset =
 					sdhci_priv_msm_offset(host);
+	u32 config;
 
 	/* Poll for CK_OUT_EN bit.  max. poll time = 50us */
 	ck_out_en = !!(readl_relaxed(host->ioaddr +
