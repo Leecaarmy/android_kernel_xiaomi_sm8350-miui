@@ -2380,13 +2380,8 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc, bool block_db)
  */
 static int dwc3_device_core_soft_reset(struct dwc3 *dwc)
 {
-<<<<<<< ours
 	u32             reg;
-	int             retries = 10;
-=======
-	u32			reg;
 	u32			timeout = 2000;
->>>>>>> theirs
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg |= DWC3_DCTL_CSFTRST;
@@ -2398,7 +2393,7 @@ static int dwc3_device_core_soft_reset(struct dwc3 *dwc)
 			goto done;
 
 		usleep_range(1000, 1100);
-	} while (--retries);
+	} while (--timeout);
 
 	dev_err(dwc->dev, "%s timedout\n", __func__);
 
