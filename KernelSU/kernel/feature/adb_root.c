@@ -8,6 +8,12 @@
 #include <linux/ptrace.h>
 #include <linux/static_key.h>
 #include <linux/slab.h>
+#include <linux/version.h>
+
+// Needed by newer ReSukiSU builds on kernels with split task stack headers.
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/task_stack.h>
+#endif
 
 #include "adb_root.h"
 #include "arch.h"

@@ -7,6 +7,7 @@ display_usage() {
 	echo "Usage: $0 [--cleanup | <commit-or-tag>]"
 	echo "  --cleanup:			  Cleans up previous modifications made by the script."
 	echo "  <commit-or-tag>:		Sets up or updates the KernelSU to specified tag or commit."
+	echo "  --submodule:		  Resets KernelSU as a submodule."
 	echo "  -h, --help:			 Displays this usage information."
 	echo "  (no args):			  Sets up or updates the KernelSU environment to the latest tagged version."
 }
@@ -62,6 +63,24 @@ setup_kernelsu() {
 	grep -q "kernelsu" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "$DRIVER_MAKEFILE" && echo "[+] Modified Makefile."
 	grep -q "source \"drivers/kernelsu/Kconfig\"" "$DRIVER_KCONFIG" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "$DRIVER_KCONFIG" && echo "[+] Modified Kconfig."
 	echo '[+] Done.'
+	echo '[!] Use --submodule to add KernelSU as a git submodule in a local git checkout.'
+}
+
+setup_submodule() {
+	cd "$GKI_ROOT"
+	if [ ! -d "$GKI_ROOT/KernelSU" ]; then
+		echo '[!] KernelSU directory does not exist. Please run setup first.'
+		exit 127
+	fi
+	if [ ! -d "$GKI_ROOT/.git" ] || [ "${CI:-false}" = "true" ] || [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
+		echo '[!] Skipping submodule setup outside a local git checkout.'
+		return 0
+	fi
+	if [ -f "$GKI_ROOT/.gitmodules" ] && grep -q 'KernelSU' "$GKI_ROOT/.gitmodules"; then
+		echo '[!] KernelSU is already a submodule.'
+		return 0
+	fi
+	git submodule add https://github.com/ReSukiSU/ReSukiSU KernelSU || echo '[!] Failed to add KernelSU as a submodule.'
 }
 
 # Process command-line arguments
@@ -70,6 +89,9 @@ if [ "$#" -eq 0 ]; then
 	setup_kernelsu
 elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
 	display_usage
+elif [ "$1" = "--submodule" ]; then
+	initialize_variables
+	setup_submodule
 elif [ "$1" = "--cleanup" ]; then
 	initialize_variables
 	perform_cleanup
