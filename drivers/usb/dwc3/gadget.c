@@ -2490,7 +2490,13 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 	}
 
 	do {
-		usleep_range(1000, 2000);
+		/*
+		 * This helper is called while dwc->lock is held by the gadget
+		 * state machine. Sleeping here triggers "scheduling while atomic"
+		 * and can break USB enumeration, especially with Clang builds.
+		 * The wait is short and bounded, so use a non-sleeping delay.
+		 */
+		udelay(1000);
 		reg = dwc3_readl(dwc->regs, DWC3_DSTS);
 		reg &= DWC3_DSTS_DEVCTRLHLT;
 	} while (--timeout && !(!is_on ^ !reg));
