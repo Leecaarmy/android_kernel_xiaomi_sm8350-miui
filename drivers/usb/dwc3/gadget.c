@@ -2381,7 +2381,7 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc, bool block_db)
 static int dwc3_device_core_soft_reset(struct dwc3 *dwc)
 {
 	u32             reg;
-	u32			timeout = 2000;
+	int			retries = 10;
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg |= DWC3_DCTL_CSFTRST;
@@ -2393,7 +2393,7 @@ static int dwc3_device_core_soft_reset(struct dwc3 *dwc)
 			goto done;
 
 		usleep_range(1000, 1100);
-	} while (--timeout);
+	} while (--retries);
 
 	dev_err(dwc->dev, "%s timedout\n", __func__);
 
@@ -2490,13 +2490,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 	}
 
 	do {
-		/*
-		 * This helper is called while dwc->lock is held by the gadget
-		 * state machine. Sleeping here triggers "scheduling while atomic"
-		 * and can break USB enumeration, especially with Clang builds.
-		 * The wait is short and bounded, so use a non-sleeping delay.
-		 */
-		udelay(1000);
 		reg = dwc3_readl(dwc->regs, DWC3_DSTS);
 		reg &= DWC3_DSTS_DEVCTRLHLT;
 	} while (--timeout && !(!is_on ^ !reg));
