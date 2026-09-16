@@ -164,9 +164,10 @@ static inline void zram_set_priority(struct zram *zram, u32 index, u32 prio)
 	 * Clear previous priority value first, in case if we recompress
 	 * further an already recompressed page
 	 */
-	zram->table[index].flags &= ~(ZRAM_COMP_PRIORITY_MASK <<
+	zram->table[index].flags &= ~((unsigned long)ZRAM_COMP_PRIORITY_MASK <<
 				      ZRAM_COMP_PRIORITY_BIT1);
-	zram->table[index].flags |= (prio << ZRAM_COMP_PRIORITY_BIT1);
+	zram->table[index].flags |= ((unsigned long)prio <<
+				     ZRAM_COMP_PRIORITY_BIT1);
 }
 
 static inline u32 zram_get_priority(struct zram *zram, u32 index)
@@ -2183,9 +2184,7 @@ static void zram_destroy_comps(struct zram *zram)
 
 static void zram_reset_device(struct zram *zram)
 {
-	struct zcomp *comp;
 	u64 disksize;
-	u32 prio;
 
 	down_write(&zram->init_lock);
 
@@ -2196,7 +2195,6 @@ static void zram_reset_device(struct zram *zram)
 		return;
 	}
 
-	comp = zram->comps[prio];
 	disksize = zram->disksize;
 	zram->disksize = 0;
 
