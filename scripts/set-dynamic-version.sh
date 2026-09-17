@@ -26,7 +26,25 @@ case "$release_version" in
 		;;
 esac
 
-commit_id=$(git -C "$source_tree" rev-parse HEAD | cut -c1-7)
+if [ -n "${SOURCE_COMMIT:-}" ]; then
+	commit_full=$SOURCE_COMMIT
+else
+	commit_full=$(git -C "$source_tree" rev-parse --verify HEAD)
+fi
+
+case "$commit_full" in
+	*[!0-9A-Fa-f]*|'')
+		echo "源码提交标识必须是十六进制 Git 哈希" >&2
+		exit 2
+		;;
+	???????*) ;;
+	*)
+		echo "无法取得至少 7 位的源码提交标识" >&2
+		exit 2
+		;;
+esac
+
+commit_id=$(printf '%.7s' "$commit_full")
 local_version="-Dynamic-g${commit_id}-${release_version}"
 
 bash "$source_tree/scripts/config" --file "$config_file" \

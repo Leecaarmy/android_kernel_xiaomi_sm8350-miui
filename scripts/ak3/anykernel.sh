@@ -4,13 +4,14 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=Kernel for DEVICE_PLACEHOLDER by EndCredits @ Github
-do.devicecheck=0
+kernel.string=Dynamic Kernel for Xiaomi 11 Pro (mars)
+do.devicecheck=1
 do.modules=0
-do.systemless=1
+do.systemless=0
 do.cleanup=1
 do.cleanuponabort=0
-device.name1=DEVICE_PLACEHOLDER
+device.name1=mars
+device.name2=M2102K1AC
 supported.versions=
 supported.patchlevels=
 supported.vendorpatchlevels=
@@ -31,6 +32,10 @@ PATCH_VBMETA_FLAG=auto;
 
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
+
+if [ ! -f "$AKHOME/Image" ]; then
+	abort "  -> 未找到内核 Image，停止刷写。"
+fi
 
 # boot install
 dump_boot; # use split_boot to skip ramdisk unpack, e.g. for devices with init_boot ramdisk
