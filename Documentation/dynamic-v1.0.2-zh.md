@@ -137,6 +137,16 @@ c9ec95939d7cb6c5966343f3ec6d655dff4114b76eddf5183972c4c16125acbf
 
 永久刷写完成后再核对真实版本名、`sys.boot_completed`、`sys.miui_bpf_ready`、槽位和 SELinux；正常重启后仍运行正式版本，才构成“永久刷入已验证”。如果新版本不能启动，恢复匹配 ROM 的原始 boot；不需要为回退格式化 userdata，也不应把跨 ROM boot 当作回退镜像。
 
+## v1.0.2 正式产物与永久刷写记录
+
+- 源码提交：。
+- 标签：。
+- Image SHA-256：。
+- boot 镜像 SHA-256：。
+-  SHA-256：。
+- 2026-09-20 已对  的  执行永久刷写，fastboot 返回 、 均为 。
+- 刷写后正常重启验证：、产品 、ROM 、槽位 、、、SELinux 。
+
 ## test7 来源清单（不是正式版校验和）
 
 | 文件 | SHA-256 |
