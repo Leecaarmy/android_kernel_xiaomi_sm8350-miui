@@ -36,6 +36,11 @@ void init_irq_work(struct irq_work *work, void (*func)(struct irq_work *))
 
 #define DEFINE_IRQ_WORK(name, _f) struct irq_work name = { .func = (_f), }
 
+static inline bool irq_work_is_busy(struct irq_work *work)
+{
+	return READ_ONCE(work->flags) & IRQ_WORK_BUSY;
+}
+
 bool irq_work_queue(struct irq_work *work);
 bool irq_work_queue_on(struct irq_work *work, int cpu);
 

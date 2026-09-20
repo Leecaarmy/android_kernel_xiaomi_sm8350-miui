@@ -537,3 +537,6 @@ static inline void rcu_bind_current_to_nocb(void) { }
 #endif
 
 #endif /* __LINUX_RCU_H */
+
+/* Tasks Trace RCU extended quiescent-state check. */
+bool rcu_dynticks_zero_in_eqs(int cpu, int *vp);

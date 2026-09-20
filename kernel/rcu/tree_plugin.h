@@ -856,7 +856,7 @@ void rcu_note_context_switch(bool preempt)
 	if (unlikely(raw_cpu_read(rcu_data.rcu_need_heavy_qs)))
 		rcu_momentary_dyntick_idle();
 	if (!preempt)
-		rcu_tasks_qs(current);
+		rcu_tasks_qs(current, false);
 out:
 	trace_rcu_utilization(TPS("End context switch"));
 }

@@ -314,6 +314,11 @@ void css_task_iter_end(struct css_task_iter *it);
  *
  * The caller must already have a reference.
  */
+static inline u64 cgroup_id(struct cgroup *cgrp)
+{
+	return cgrp->kn->id.id;
+}
+
 static inline void css_get(struct cgroup_subsys_state *css)
 {
 	if (!(css->flags & CSS_NO_REF))

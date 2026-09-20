@@ -431,4 +431,9 @@ static inline void *offset_to_ptr(const int *off)
  */
 #define prevent_tail_call_optimization()	mb()
 
+/* KCSAN is not present in this 5.4 tree; annotation only. */
+#ifndef data_race
+#define data_race(expr) (expr)
+#endif
+
 #endif /* __LINUX_COMPILER_H */

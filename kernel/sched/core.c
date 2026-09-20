@@ -4309,6 +4309,7 @@ static void __sched notrace __schedule(bool preempt)
 
 	local_irq_disable();
 	rcu_note_context_switch(preempt);
+	rcu_tasks_trace_qs(current);
 
 	/*
 	 * Make sure that signal_pending_state()->signal_pending() below
@@ -8580,3 +8581,32 @@ int set_task_boost(int boost, u64 period)
 	return 0;
 }
 #endif
+
+/* Tasks Trace RCU task-state inspection, from Linux v5.10. */
+bool try_invoke_on_locked_down_task(struct task_struct *p, bool (*func)(struct task_struct *t, void *arg), void *arg)
+{
+	bool ret = false;
+	struct rq_flags rf;
+	struct rq *rq;
+
+	lockdep_assert_irqs_enabled();
+	raw_spin_lock_irq(&p->pi_lock);
+	if (p->on_rq) {
+		rq = __task_rq_lock(p, &rf);
+		if (task_rq(p) == rq)
+			ret = func(p, arg);
+		rq_unlock(rq, &rf);
+	} else {
+		switch (p->state) {
+		case TASK_RUNNING:
+		case TASK_WAKING:
+			break;
+		default:
+			smp_rmb(); // See smp_rmb() comment in try_to_wake_up().
+			if (!p->on_rq)
+				ret = func(p, arg);
+		}
+	}
+	raw_spin_unlock_irq(&p->pi_lock);
+	return ret;
+}
