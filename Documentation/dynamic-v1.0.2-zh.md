@@ -8,8 +8,8 @@
 | --- | --- |
 | 正式版本 | v1.0.2 |
 | Linux 版本 | 5.4.302 |
-| 正式内核名称 | `5.4.302-Dynamic-g<发布提交前7位>-v1.0.2` |
-| 维护分支 | `mi11pro/Dynamic-kernel` |
+| 正式内核名称 | `5.4.302-Dynamic-g<发布提交前7位>` |
+| 维护分支 | `Dynamic/xiaomi_11_pro-kernel-a17` |
 | 原稳定版基线 | Dynamic v1.0.1，`2ef50902a057757ec94e98b95a9c70cb2e585e81` |
 | 通过临时启动的候选 | `5.4.302-Dynamic-v1.0.1-a17-test7` |
 | 本轮实测设备 | 小米 11 Pro，`mars`，M2102K1AC |
@@ -40,7 +40,7 @@ Android 17 ROM 的 `netbpfload` 存在基于 `uname(2)` 的内核最低版本检
 
 `kernel/sys.c` 的 `newuname()` 因此为任务名（`current->comm`）**恰好等于** `netbpfload` 的调用者返回 `5.10.199-dsu-bpf-compat`。其他任务继续得到真实 Dynamic 内核版本。该分支位于已有 SUSFS uname 处理之后，是明确、局部的 Android BPF loader 兼容措施。
 
-这不改变实际 Linux 版本，也不代表内核具备全部 5.10 接口。进程名匹配用于兼容，不是身份认证或安全边界。用户查看普通 `uname -r` 时应看到正式的 `5.4.302-Dynamic-g…-v1.0.2` 名称。
+这不改变实际 Linux 版本，也不代表内核具备全部 5.10 接口。进程名匹配用于兼容，不是身份认证或安全边界。用户查看普通 `uname -r` 时应看到正式的 `5.4.302-Dynamic-g…` 名称。发布版本由 Git 提交、标签和 Release 标题区分，不再把稳定版后缀写入内核名称。
 
 ### 3. AW8697 振动驱动适配
 
@@ -119,7 +119,9 @@ test7 保存的 logcat 还出现 `NotificationVibratorHelper` 对通知波形 `[
 
 ## 正式构建、刷写与回退说明
 
-正式构建必须来自最终提交后的源码，并执行仓库的 `scripts/set-dynamic-version.sh` 生成版本名。发布标签、内核名称的七位提交号、源代码归档和产物清单应指向同一提交。不得把带 `test7` 名称的文件直接重命名为 v1.0.2 代替重编译。
+正式构建必须来自最终提交后的源码，并执行仓库的 `scripts/set-dynamic-version.sh` 生成版本名。发布标签、内核名称的七位提交号、源代码归档和产物清单应指向同一提交。不得把带 `test7` 名称的文件直接重命名为正式版本代替重编译。
+
+从本次发布分支开始，`uname -r` 统一采用 `5.4.302-Dynamic-g<提交前7位>`。构建元数据中的作者为 `Dynamic`，内核名称不包含日期。Release 附件名称在内核名称后追加源码提交时间（`YYYYMMDD-HHMM`，Asia/Shanghai），日期取对应提交而不是上传时间。`scripts/package-dynamic-release.sh` 会生成 Image、匹配 ROM 的 boot、AnyKernel3 包、配置、构建清单和 SHA-256 清单。
 
 产物应包含：最终 Image、有效构建配置、构建日志、SHA-256 清单，以及适用于上述 ROM 的 boot 镜像；若同时提供 AnyKernel3 包，应使用同一 Image，并明确其设备检查及保留当前 ramdisk 的行为。ROM 专用 boot 镜像仅适用于匹配的 ROM / boot 格式，不能作为跨 ROM 通用镜像。
 

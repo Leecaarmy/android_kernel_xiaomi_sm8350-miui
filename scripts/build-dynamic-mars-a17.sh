@@ -4,7 +4,7 @@
 set -euo pipefail
 src=$(cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$src"
-out=${OUT:-"$src/../out-dynamic-v1.0.2"}
+out=${OUT:-"$src/../out-dynamic-mars-a17"}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then
@@ -23,13 +23,13 @@ args=(O="$out" ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang-17 LD=ld.lld-17
       OBJDUMP=llvm-objdump-17 STRIP=llvm-strip-17
       CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=)
 make "${args[@]}" vendor/mars_hyperos4_a17_defconfig
-bash scripts/set-dynamic-version.sh "$out/.config" v1.0.2
+bash scripts/set-dynamic-version.sh "$out/.config"
 make "${args[@]}" olddefconfig
 grep -qx 'CONFIG_BPF_STREAM_PARSER=y' "$out/.config"
 grep -qx 'CONFIG_FW_LOADER_USER_HELPER=y' "$out/.config"
 grep -qx '# CONFIG_FW_LOADER_USER_HELPER_FALLBACK is not set' "$out/.config"
 make "${args[@]}" -j"${JOBS:-10}" Image
-expected="5.4.302-Dynamic-g${commit:0:7}-v1.0.2"
+expected="5.4.302-Dynamic-g${commit:0:7}"
 test "$(cat "$out/include/config/kernel.release")" = "$expected"
 {
     printf 'source_commit=%s\nkernel_release=%s\n' "$commit" "$expected"

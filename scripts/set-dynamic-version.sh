@@ -3,14 +3,13 @@
 
 set -eu
 
-if [ "$#" -ne 2 ]; then
-	echo "用法: $0 <.config 路径> <版本号>" >&2
-	echo "示例: $0 out/.config v1.0.1" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+	echo "用法: $0 <.config 路径> [旧版本号]" >&2
+	echo "示例: $0 out/.config" >&2
 	exit 2
 fi
 
 config_file=$1
-release_version=$2
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 source_tree=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
@@ -18,13 +17,6 @@ if [ ! -f "$config_file" ]; then
 	echo "配置文件不存在: $config_file" >&2
 	exit 2
 fi
-
-case "$release_version" in
-	*[!A-Za-z0-9._-]*|'')
-		echo "版本号只能包含字母、数字、点、下划线和连字符" >&2
-		exit 2
-		;;
-esac
 
 if [ -n "${SOURCE_COMMIT:-}" ]; then
 	commit_full=$SOURCE_COMMIT
@@ -45,7 +37,7 @@ case "$commit_full" in
 esac
 
 commit_id=$(printf '%.7s' "$commit_full")
-local_version="-Dynamic-g${commit_id}-${release_version}"
+local_version="-Dynamic-g${commit_id}"
 
 bash "$source_tree/scripts/config" --file "$config_file" \
 	--set-str LOCALVERSION "$local_version" \
