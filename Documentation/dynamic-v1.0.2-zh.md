@@ -139,13 +139,13 @@ c9ec95939d7cb6c5966343f3ec6d655dff4114b76eddf5183972c4c16125acbf
 
 ## v1.0.2 正式产物与永久刷写记录
 
-- 源码提交：。
-- 标签：。
-- Image SHA-256：。
-- boot 镜像 SHA-256：。
--  SHA-256：。
-- 2026-09-20 已对  的  执行永久刷写，fastboot 返回 、 均为 。
-- 刷写后正常重启验证：、产品 、ROM 、槽位 、、、SELinux 。
+- 源码提交：573058b36621e404e178f683ce89958d8d0f8fe1。
+- 标签：dynamic-kernel-v1.0.2。
+- Image SHA-256：4a33d8418632126e8ca34ea4536580dd401f4ff261d1d4a3f1777c05c5daca9d。
+- boot 镜像 SHA-256：fdac44e11190ce0e362d8e907a19ef5963f4cb11b9a579a8b22f8142f4e60c2e。
+- .config SHA-256：cac8e0b5ddf6631931573095c4ad47b5a86679c64c3e13b997ee2f9a986ae874。
+- 2026-09-20 已对 mars 的 boot_a 执行永久刷写，fastboot 返回 Sending、Writing 均为 OKAY。
+- 刷写后正常重启验证：uname -r=5.4.302-Dynamic-g573058b-v1.0.2、产品 mars、ROM OS4.0.0.25.XKACNXM、槽位 _a、sys.boot_completed=1、sys.miui_bpf_ready=1、SELinux Enforcing。
 
 ## test7 来源清单（不是正式版校验和）
 
