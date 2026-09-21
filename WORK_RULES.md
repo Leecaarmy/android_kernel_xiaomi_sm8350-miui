@@ -26,6 +26,7 @@
 - 上传至 GitHub Releases 的文件，必须在文件名末尾（扩展名前）附加对应源码提交的日期与时间，精确到分钟，格式为 `YYYYMMDD-HHmm`；时间取对应源码提交时间。
 - Release 必须包含 Image 内核镜像和 AK3 内核刷机包。
 - AK3 刷机包的设备检查必须限制为小米 11 Pro（`mars` / `M2102K1AC`）和小米 11 Ultra（`star` / `M2102K1G`，以源码及设备树实际标识为准）两款机型；不得无条件放宽到其他机型。
+- AK3 允许由 Horizon Kernel Flasher 在 Android 系统内执行，也允许 recovery 安装；不得增加 recovery 环境或 Bootloader 状态准入拦截。保留槽位定位、boot 格式及内核长度边界、Image 完整性和写后读回校验，以确保只替换内核、不修改 ramdisk 或启动配置。
 - Release 必须详细记录内核构建信息，包括源码提交、分支、编译时间、工具链、配置、`uname -r`、产物哈希和打包方式。
 - Release 必须记录当前版本新增的功能、修复的 bug、已有功能或兼容实现，以及适配的系统版本和机型。
 - 发布前必须核对源码提交、Image、AK3 包和 Release 说明之间的版本、提交短哈希和哈希值一致。

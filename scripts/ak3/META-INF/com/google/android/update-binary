@@ -1,14 +1,21 @@
 #!/sbin/sh
 # SPDX-License-Identifier: GPL-2.0
-# Dynamic minimal recovery entry point for the AnyKernel3 ZIP layout.
+# Dynamic entry point for recovery and Horizon Kernel Flasher.
 # Uses the bundled AnyKernel3 BusyBox; does not run upstream mount/patch helpers.
 set -eu
 OUTFD="$2"
 ZIPFILE="$3"
-ui_print() { printf 'ui_print %s\nui_print\n' "$*" > "/proc/self/fd/$OUTFD"; }
-[ -d /tmp ] || { ui_print 'ERROR: Recovery /tmp is required'; exit 1; }
-WORK=$(mktemp -d /tmp/dynamic-ak3.XXXXXX)
-case "$WORK" in /tmp/dynamic-ak3.*) ;; *) exit 1;; esac
+ui_print() { printf 'ui_print %s\nui_print\n' "$*" >&"$OUTFD"; }
+# Horizon invokes this through Android sh; /tmp is not guaranteed there.
+if [ -d /tmp ] && [ -w /tmp ]; then
+    WORK=$(mktemp -d /tmp/dynamic-ak3.XXXXXX)
+elif [ -d /dev ] && [ -w /dev ]; then
+    WORK=$(mktemp -d /dev/dynamic-ak3.XXXXXX)
+else
+    ui_print 'ERROR: No writable temporary workspace (/tmp or /dev)'
+    exit 1
+fi
+case "$WORK" in /tmp/dynamic-ak3.*|/dev/dynamic-ak3.*) ;; *) exit 1;; esac
 unzip -p "$ZIPFILE" tools/busybox > "$WORK/busybox" || exit 1
 chmod 755 "$WORK/busybox"
 BB="$WORK/busybox"
@@ -19,6 +26,6 @@ export PATH="$WORK/bin:/sbin:/system/bin:/system/xbin:/vendor/bin"
 if "$BB" sh "$WORK/anykernel.sh" "$OUTFD" "$WORK"; then
     "$BB" rm -rf "$WORK"
 else
-    ui_print "Installation stopped. Diagnostic files remain in $WORK until reboot."
+    ui_print "Installation stopped. Diagnostic files remain in $WORK until cleanup or reboot."
     exit 1
 fi

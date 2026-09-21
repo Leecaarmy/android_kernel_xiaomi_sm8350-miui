@@ -68,7 +68,7 @@ manifest = {
     "linker": subprocess.check_output(["ld.lld-17", "--version"], text=True).strip(),
     "config": "vendor/mars_hyperos4_a17_defconfig + scripts/set-dynamic-version.sh",
     "kernel_payload_bytes": len(image_data),
-    "installer": "Dynamic kernel-only AK3 layout; recovery only; active boot kernel bytes only; exact old/new kernel length required; complete read-back verification",
+    "installer": "Dynamic kernel-only AK3 layout; recovery or Horizon; no bootloader-state gate; active boot kernel bytes only; exact old/new kernel length required; complete read-back verification",
     "allowed_devices": ["mars", "star", "M2102K1AC", "M2102K1G"],
     "files": {p.name: sha(p) for p in (image, config, ak3)},
 }

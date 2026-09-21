@@ -1,8 +1,26 @@
-# Dynamic Kernel：Android 17 双击唤醒与 Edge 兼容修复
+# Dynamic Kernel：ReKernel-X v1.6 与 Horizon 安装兼容
 
-本次发布修复小米 11 Pro 在当前 HyperOS 4 Android 17 上的两个问题：息屏双击不能亮屏，以及 Edge 全新安装后卡在引导 Logo 页。内核作者署名统一为 Dynamic，内核版本保留 5.4.302。
+本次发布将 ReKernel-X 升级至官方 v1.6，补充 TCP 接收事件的 socket 查询，并允许 Horizon Kernel Flasher 在 Android 中执行 AK3 安装包。保留此前已验证的双击唤醒、触控、振动和 Edge 兼容修复。内核作者署名统一为 Dynamic，内核版本为 5.4.302。
 
-## 新修复
+## 本次更新
+
+### ReKernel-X v1.6
+
+上游为 `myflavor/ReKernel-X` 正式版 `1.6`，提交 `afb5e6bc62c6b9702c823009566a58b2e53b7797`，发布于 2026-09-20。集成其 LKM 内核源码，保留当前 Xiaomi 5.4 Binder hook 签名、头文件顺序和必要保护。异步清理前持有 Binder proc 临时引用，清理结束后释放；工作分配失败时保留原事务，避免在不合适的上下文同步清理。
+
+### TCP 网络事件补查
+
+旧实现仅使用 skb 已附带的 socket。早期 demux 未附加接收 socket 时会漏报；loopback 也可能保留发送者 socket。本次复用内核已有 IPv4/IPv6 Netfilter 查询函数定位接收 socket，通过完整 socket 的 sk_uid 获取 UID，并释放查询取得的引用。补充 TCP/IP 头部边界检查，避免将 TIME_WAIT/request socket 当作完整 socket 读取。
+
+保留现有 rekernel_x2/events ABI、监控 UID 过滤和 TCP payload/SYN/FIN/RST 语义；不增加 UDP 唤醒或纯 ACK 唤醒，所有网络路径仍返回 NF_ACCEPT。
+
+**本次不是“微信通知 bug 修复”。** 用户已确认微信此前没有在 NoActive 中启用网络解冻；NoActive 只为 packetUidSet 中的应用注册网络监控，并在网络事件回调中再次检查该配置。内核模拟测试与应用通知配置是不同问题，未修改 NoActive 设置，也不宣称所有应用通知均已验证。
+
+### Horizon 安装入口
+
+取消运行中 zygote/recovery 环境与 Bootloader 状态拦截，机型兼容准入仅限小米 11 Pro / Ultra。Horizon 通过 Android sh 调用 update-binary；当 /tmp 不存在或不可写时，使用 /dev 中独立临时目录，不挂载其他目录。槽位、boot 布局、内核长度、Image 校验和写后比对继续保留，确保不改 ramdisk 或启动配置。
+
+## 保留的修复
 
 ### 息屏双击唤醒
 
@@ -18,13 +36,18 @@
 
 - 保留原稳定版设备基础、schedutil/WALT 调度和 hrtimer CPU 热插拔初始化修复。
 - 保留 Android 17 所需 BPF 兼容实现、Tasks Trace RCU 及 netbpfload 专用版本兼容路径；普通 uname 仍显示真实 5.4.302-Dynamic-g提交前7位。不是整体升级为 5.10。
-- 保留 ReSukiSU v4.2.0-rc2 内核驱动（35149）、SUSFS v2.3.0、ReKernel-X v1.5。管理器 APK 是独立组件，不随内核包安装。
+- 保留 ReSukiSU v4.2.0-rc2 内核驱动（35149）、SUSFS v2.3.0；ReKernel-X 更新为 v1.6。管理器 APK 是独立组件，不随内核包安装。
 - 保留 AW8697 振动接口、RAM 固件延迟加载、波形序列清理及既有增益控制；固件自动用户空间 fallback 保持关闭。
 - 保留 ZRAM lz4p、F2FS/EROFS、seccomp/filter、BPF syscall/JIT。已有源码不等于本次逐项完成所有功能测试。
 
 ## 实机测试与适配范围
 
-功能修复源码基线为 db11dd64d5cb6813b7e228d80fe65bba6b2e6a7f，本次发布整理仅修改打包、规范和说明文件，内核功能实现与该实测提交相同。
+此前双击和 Edge 的实测提交为 db11dd64d5cb6813b7e228d80fe65bba6b2e6a7f。本次 ReKernel-X 候选 aa18893684d30718ac1e1732849987892c78810a 已编译并在手机临时启动，uname 为 5.4.302-Dynamic-gaa18893；最终发布整理仅修改安装脚本、测试、规范和文档，内核功能源码与该候选一致。最终重新编译产物与候选的实际运行版本需要区分。
+
+- 本次候选：正常启动、ADB/Root、SELinux Enforcing、ZRAM lz4p 正常；Edge 原生 zygote 与沙箱创建成功，沙箱 Seccomp=2、NoNewPrivs=1、CapBnd=0。
+- 使用独立 UID 19999 的固定 16 字节 TCP 载荷对照：旧内核 IPv4/IPv6 均收到数据但网络事件为 0；候选各收到 3 个事件，其中包含 bytes=16。未监控 UID 的 IPv4/IPv6 均没有网络事件。
+- Binder Netlink 事件可接收；测试监控 UID 已删除，手机 /dev 临时探针已清理。boot_a 在临时启动前后哈希相同，未永久刷写。
+- 本次没有完成 Binder 异步清理并发压力测试、所有网络路径及真实应用通知端到端验证。双击、触控、振动的源码未改，下面的用户人工确认和详细 capability 测试属于先前实测基线，并非本次全部重测。
 
 - 实测机型：小米 11 Pro，mars / M2102K1AC。
 - 实测系统：用户记录的 HyperOS OS4.0.0.26.XKACNXM.D00 / Android 17；系统属性为 17OS4.0.260902.062800686.QCPECN.S。
@@ -42,13 +65,17 @@
 
 AK3 使用 AnyKernel3 recovery ZIP 布局及原有 BusyBox，采用 Dynamic 的最小安装入口，不运行旧版 AK3 的 ramdisk 解包/重打或 vbmeta 修补流程。第三方许可证和署名保留。
 
-**必须在 recovery 安装，Bootloader 已解锁，当前槽位可确定，boot header 为 v3，且原 boot 的 kernel_size 必须与包内 Image 的字节长度完全一致。任何条件不符，写入前退出。不要绕过该检查。**
+**允许 recovery 或 Horizon Kernel Flasher 执行，不再根据 zygote 或 Bootloader 状态拦截。机型准入仅限上述 Pro / Ultra 标识。仍要求当前槽位可确定、boot header 为 v3，且原 boot 的 kernel_size 与包内 Image 的字节长度完全一致；这些写入目标与边界检查不符时，在写入前退出。**
 
-包内只含 Image、校验值、最小安装脚本、BusyBox 和许可证/说明；不含 ramdisk/、patch/、modules/、DTB/DTBO 或完整 boot。读取当前 boot 后，在 recovery 内存中构造预期镜像并确认所有非内核字节不变；实际仅从偏移 4096 写入内核长度的字节，之后完整读回比对。保留 ramdisk、cmdline、完整启动头和尾部，包括原 AVB 元数据；原 AVB 摘要不会重新签名，因此必须使用已解锁设备。
+包内只含 Image、校验值、最小安装脚本、BusyBox 和许可证/说明；不含 ramdisk/、patch/、modules/、DTB/DTBO 或完整 boot。读取当前 boot 后，在安装器 /tmp 或 /dev 临时工作目录构造预期镜像并确认所有非内核字节不变；实际仅从偏移 4096 写入内核长度的字节，之后完整读回比对。保留 ramdisk、cmdline、完整启动头和尾部，包括原 AVB 元数据；原 AVB 摘要不会重新签名，取消 Bootloader 状态检查并不表示产物能通过锁定设备的启动验证。
 
-只写当前槽位的 boot 内核区域，不挂载或修改其他分区、不切换槽位、不清数据、不自动重启。失败时原始 boot 临时备份保留在报告的 /tmp/dynamic-ak3.* 路径，重启后消失；不能把它视为持久备份。
+只写当前槽位的 boot 内核区域，不挂载或修改其他分区、不切换槽位、不清数据、不自动重启。失败时原始 boot 临时备份保留在报告的 /tmp/dynamic-ak3.* 或 /dev/dynamic-ak3.* 路径，可能被安装器清理或在重启后消失；不能把它视为持久备份。
 
 本轮 AK3 安装逻辑通过本地模拟镜像和实际 boot 备份的离线验证。没有为了测试包而在手机上永久刷写，因此不宣称 recovery 永久安装已经实测。临时内核实测和安装器离线验证是不同证据。
+
+Horizon 安装准入通过离线测试：模拟 zygote 存在、锁定状态属性，四个允许标识均可继续到槽位校验，其他机型仍拒绝。Horizon 的实际分区写入和刷后重启未实机验证，不能将入口兼容或本地镜像测试等同于已完成刷机验证。
+
+另外在 mars 的 Android sh 中按 Horizon 参数 `update-binary 3 1 ZIP` 执行真实解包入口与包内 BusyBox，用无 Image、无分区操作的测试脚本替换安装主体：/tmp 路径通过；仅模拟 /tmp 不可用的测试副本也成功回退到 /dev。日志直接使用传入的文件描述符，避免重新打开 /proc/self/fd 在某些 Android 输出通道失败。测试临时目录已清理，boot_a 哈希仍与测试前一致。
 
 ## 构建与复现
 

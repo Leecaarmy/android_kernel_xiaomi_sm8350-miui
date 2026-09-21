@@ -6,23 +6,17 @@ set -o pipefail
 OUTFD="$1"
 WORK="$2"
 cd "$WORK"
-ui_print() { printf 'ui_print %s\nui_print\n' "$*" > "/proc/self/fd/$OUTFD"; }
+ui_print() { printf 'ui_print %s\nui_print\n' "$*" >&"$OUTFD"; }
 abort() { ui_print "ERROR: $*"; exit 1; }
 . ./tools/kernel-only.sh
 ui_print 'Dynamic kernel: Xiaomi 11 Pro / Ultra only'
 # Do not mount partitions or invoke the legacy AK3 ramdisk/vbmeta patchers.
-if ps -A 2>/dev/null | grep -E '(^|[[:space:]])zygote(64)?([[:space:]]|$)' >/dev/null; then
-    abort 'Install from recovery, not a running Android system'
-fi
 matched=0
 for prop in ro.product.device ro.product.vendor.device ro.vendor.product.device ro.build.product; do
     device=$(getprop "$prop" 2>/dev/null || true)
     if is_supported_device "$device"; then matched=1; break; fi
 done
 [ "$matched" = 1 ] || abort 'Unsupported device: only mars / star are allowed'
-locked=$(getprop ro.boot.flash.locked 2>/dev/null || true)
-verified=$(getprop ro.boot.verifiedbootstate 2>/dev/null || true)
-[ "$locked" = 0 ] || [ "$verified" = orange ] || abort 'Cannot confirm an unlocked bootloader'
 slot=$(getprop ro.boot.slot_suffix 2>/dev/null || true)
 if [ -z "$slot" ]; then slot="_$(getprop ro.boot.slot 2>/dev/null || true)"; fi
 case "$slot" in _a|_b) ;; *) abort 'Cannot determine current slot';; esac

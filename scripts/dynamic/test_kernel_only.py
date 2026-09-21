@@ -44,6 +44,38 @@ for device in ("mars", "star", "M2102K1AC", "M2102K1G", "venus", "alioth", "", "
     r = subprocess.run(["bash", "-c", '. "$1"; is_supported_device "$2"', "test", str(core), device])
     assert (r.returncode == 0) == (device in ("mars", "star", "M2102K1AC", "M2102K1G"))
 print("PASS: device whitelist admits only specified identifiers")
+# Stop at slot resolution before any block device access. A running zygote and
+# locked-state properties must not prevent supported devices reaching this guard.
+with tempfile.TemporaryDirectory(prefix="dynamic-ak3-admission-") as tmp:
+    import os
+    root = Path(tmp)
+    props = root / "getprop"
+    props.write_text('''#!/bin/sh
+echo "$1" >> "$PROP_LOG"
+case "$1" in
+  ro.product.device) printf '%s\\n' "$TEST_DEVICE";;
+  ro.boot.flash.locked) echo 1;;
+  ro.boot.verifiedbootstate) echo green;;
+esac
+''')
+    props.chmod(0o755)
+    ps = root / "ps"
+    ps.write_text('#!/bin/sh\necho "123 zygote64"\necho "456 zygote"\n')
+    ps.chmod(0o755)
+    for device in ("mars", "star", "M2102K1AC", "M2102K1G", "venus", "alioth", ""):
+        log = root / "properties.log"
+        log.write_text("")
+        env = dict(os.environ, PATH=str(root) + ":" + os.environ["PATH"],
+                   TEST_DEVICE=device, PROP_LOG=str(log))
+        r = subprocess.run(["bash", str(src / "scripts/ak3/anykernel.sh"), "1",
+                            str(src / "scripts/ak3")], env=env, capture_output=True, text=True)
+        assert r.returncode != 0
+        expected = "Cannot determine current slot" if device in ("mars", "star", "M2102K1AC", "M2102K1G") else "Unsupported device"
+        assert expected in r.stdout, (device, r.stdout, r.stderr)
+        assert "ro.boot.flash.locked" not in log.read_text()
+        assert "ro.boot.verifiedbootstate" not in log.read_text()
+        assert "Writing only" not in r.stdout
+    print("PASS: Android/Horizon admission; no bootloader-state gate; whitelist and slot guard preserved")
 # Real saved-device image: exercise the identical preparation logic when supplied.
 import sys
 if len(sys.argv) == 3:
