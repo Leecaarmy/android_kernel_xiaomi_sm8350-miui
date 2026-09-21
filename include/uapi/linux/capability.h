@@ -376,7 +376,14 @@ struct vfs_ns_cap_data {
 /* Allow privileged BPF operations and advanced verifier features. */
 #define CAP_BPF			39
 
-#define CAP_LAST_CAP         CAP_BPF
+/*
+ * Checkpoint/restore capability ABI (Linux 5.9).
+ * Keep the existing CAP_SYS_ADMIN checks for checkpoint/restore operations
+ * in this tree; this bit permits newer userspace to enumerate and drop it.
+ */
+#define CAP_CHECKPOINT_RESTORE  40
+
+#define CAP_LAST_CAP         CAP_CHECKPOINT_RESTORE
 
 #define cap_valid(x) ((x) >= 0 && (x) <= CAP_LAST_CAP)
 
