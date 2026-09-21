@@ -18,18 +18,11 @@
 #include <linux/netfilter_ipv6.h>
 #include <net/rtnetlink.h>
 #include <net/sock.h>
+#include <net/netfilter/nf_socket.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <linux/rcupdate.h>
-
-static inline uid_t line_sock2uid(struct sock *sk)
-{
-	if (sk && sk->sk_socket)
-		return SOCK_INODE(sk->sk_socket)->i_uid.val;
-	else
-		return 0;
-}
 
 /*
  * Parse TCP payload length from an IPv4 packet.
@@ -45,7 +38,8 @@ static int parse_tcp_ipv4(struct sk_buff *skb, __u8 *proto, int *data_len)
 		return -1;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP)
+	if (iph->version != 4 || iph->ihl < 5 ||
+	    iph->protocol != IPPROTO_TCP || ip_is_fragment(iph))
 		return -1;
 
 	ip_hdr_len = iph->ihl << 2;
@@ -54,6 +48,9 @@ static int parse_tcp_ipv4(struct sk_buff *skb, __u8 *proto, int *data_len)
 
 	iph = ip_hdr(skb);
 	th = (struct tcphdr *)((unsigned char *)iph + ip_hdr_len);
+	if (th->doff < 5 || ntohs(iph->tot_len) > skb->len ||
+	    ntohs(iph->tot_len) < ip_hdr_len + (th->doff << 2))
+		return -1;
 	*data_len = ntohs(iph->tot_len) - ip_hdr_len - (th->doff << 2);
 
 	if (*data_len <= 0 && !th->syn && !th->fin && !th->rst)
@@ -78,7 +75,8 @@ static int parse_tcp_ipv6(struct sk_buff *skb, __u8 *proto, int *data_len)
 	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr)))
 		return -1;
 
-	if (ipv6_find_hdr(skb, &thoff, -1, &frag_off, NULL) != IPPROTO_TCP)
+	if (ipv6_find_hdr(skb, &thoff, -1, &frag_off, NULL) != IPPROTO_TCP ||
+	    frag_off)
 		return -1;
 
 	if (!pskb_may_pull(skb, thoff + sizeof(struct tcphdr)))
@@ -86,6 +84,10 @@ static int parse_tcp_ipv6(struct sk_buff *skb, __u8 *proto, int *data_len)
 
 	iph6 = ipv6_hdr(skb);
 	th = (struct tcphdr *)(skb_network_header(skb) + thoff);
+	if (iph6->version != 6 || th->doff < 5 ||
+	    sizeof(*iph6) + ntohs(iph6->payload_len) > skb->len ||
+	    sizeof(*iph6) + ntohs(iph6->payload_len) < thoff + (th->doff << 2))
+		return -1;
 	*data_len = ntohs(iph6->payload_len) - (thoff - sizeof(struct ipv6hdr))
 	          - (th->doff << 2);
 
@@ -111,32 +113,51 @@ static unsigned int rkx_pkg_ipv4_ipv6_in(void *priv, struct sk_buff *skb,
 	if (state->hook != NF_INET_LOCAL_IN || !state->in)
 		return NF_ACCEPT;
 
-	sk = skb_to_full_sk(skb);
-	if (!sk || !sk_fullsock(sk))
+	/* LOCAL_IN has the network header at skb->data. Validate before lookup. */
+	if (skb_network_offset(skb) != 0)
 		return NF_ACCEPT;
-
-	uid = line_sock2uid(sk);
-	if (uid < MIN_USERAPP_UID)
-		return NF_ACCEPT;
-
-	rcu_read_lock();
-	if (!net_uid_monitored_rcu(uid)) {
-		rcu_read_unlock();
-		return NF_ACCEPT;
-	}
-	rcu_read_unlock();
-
-	if (ip_hdr(skb)->version == 4) {
+	if (state->pf == NFPROTO_IPV4) {
 		if (parse_tcp_ipv4(skb, &proto, &data_len) < 0)
 			return NF_ACCEPT;
 #if IS_ENABLED(CONFIG_IPV6)
-	} else if (ip_hdr(skb)->version == 6) {
+	} else if (state->pf == NFPROTO_IPV6) {
 		if (parse_tcp_ipv6(skb, &proto, &data_len) < 0)
 			return NF_ACCEPT;
 #endif
 	} else {
 		return NF_ACCEPT;
 	}
+
+	/*
+	 * Early demux is an optimization, not a guarantee. Routed/redirected
+	 * ingress can have no skb->sk; loopback can retain the sending socket.
+	 * Resolve the receiving socket without stealing/changing skb ownership.
+	 */
+	sk = skb_to_full_sk(skb);
+	if (!sk || !sk_fullsock(sk) || (state->in->flags & IFF_LOOPBACK)) {
+		if (state->pf == NFPROTO_IPV4)
+			sk = nf_sk_lookup_slow_v4(state->net, skb, state->in);
+#if IS_ENABLED(CONFIG_IPV6)
+		else
+			sk = nf_sk_lookup_slow_v6(state->net, skb, state->in);
+#endif
+		if (!sk)
+			return NF_ACCEPT;
+		/* The lookup can return a time-wait/request socket: never read sk_uid. */
+		uid = sk_fullsock(sk) ? __kuid_val(sk->sk_uid) : 0;
+		sock_gen_put(sk);
+	} else {
+		uid = __kuid_val(sk->sk_uid);
+	}
+	if (uid < MIN_USERAPP_UID)
+		return NF_ACCEPT;
+
+	rcu_read_lock();
+	if (!rkx_net_uid_monitored_rcu(uid)) {
+		rcu_read_unlock();
+		return NF_ACCEPT;
+	}
+	rcu_read_unlock();
 
 	rkx_log_debug("Receive net data! target=%d\n", uid);
 	if (rkx_netlink_ready()) {
@@ -148,7 +169,7 @@ static unsigned int rkx_pkg_ipv4_ipv6_in(void *priv, struct sk_buff *skb,
 				.data_len = data_len,
 			},
 		};
-		sendMessage(&event);
+		rkx_send_message(&event);
 	}
 
 	return NF_ACCEPT;
@@ -172,7 +193,7 @@ static struct nf_hook_ops rkx_nf_ops[] = {
 #endif
 };
 
-static bool re_netfilter_registered;
+static bool netfilter_registered;
 
 static void __unregister_netfilter(void)
 {
@@ -185,15 +206,15 @@ static void __unregister_netfilter(void)
 	rtnl_unlock();
 }
 
-void unregister_netfilter(void)
+void rkx_unregister_netfilter(void)
 {
-	if (re_netfilter_registered) {
+	if (netfilter_registered) {
 		__unregister_netfilter();
-		re_netfilter_registered = false;
+		netfilter_registered = false;
 	}
 }
 
-int register_netfilter(void)
+int rkx_register_netfilter(void)
 {
 	int rc = LINE_SUCCESS;
 	struct net *net = NULL;
@@ -213,6 +234,6 @@ int register_netfilter(void)
 		return LINE_ERROR;
 	}
 
-	re_netfilter_registered = true;
+	netfilter_registered = true;
 	return LINE_SUCCESS;
 }

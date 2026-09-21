@@ -4,7 +4,7 @@ obj-$(CONFIG_REKERNEL_X) += rekernel_x.o
 
 # Keep the in-tree build tied to the imported upstream release.  Builders can
 # override this when updating the source: make RKX_VERSION=vX.Y.
-RKX_VERSION ?= v1.5
+RKX_VERSION ?= v1.6
 ifdef RKX_VERSION
 ccflags-y += -DRKX_VERSION=\"$(RKX_VERSION)\"
 endif
