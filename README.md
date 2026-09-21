@@ -1,3 +1,5 @@
+> 最新 Android 17 双击唤醒 / Edge 修复及严格只替换内核的安装限制见 [发布说明](Documentation/dynamic-a17-fixes-zh.md)。历史版本的完整 boot 刷写说明不适用于本次发布。
+
 # How do I submit patches to Android Common Kernels
 
 1. BEST: Make all of your changes to upstream Linux. If appropriate, backport to the stable releases.
