@@ -39,3 +39,11 @@
 - 测试必须记录基线、源码提交、实际运行版本、验证项目、结果及异常；不能仅凭编译成功或一次正常启动宣布修复完成。
 - 若发现新异常或回归，应停止发布和永久刷入，定位并处理；必要时恢复已验证状态，恢复操作仍受用户授权范围约束。
 - 必须如实区分已通过、未通过和未测试项目；无法凭有限测试保证不存在任何潜在 bug，不得作未经验证的“绝无新 bug”承诺。
+
+## 6. HoshinoNeko AK3 模板派生打包
+
+- 用户指定使用 `HoshinoNeko_Star_Stable2_Any3Kernel.zip` 时，以该 ZIP 为唯一模板，保留其目录结构、脚本、工具、许可证、文件权限和其他条目。
+- 模板派生包只替换 ZIP 根目录的 `Image`，以及 `anykernel.sh` 中精确的内核显示名称：`MiYume HoshinoNeko Kernel For SM8350` 替换为 `Dynamic Kernel For SM8350`。
+- 不得借模板派生过程顺带修改 `ramdisk/`、`patch/`、`modules/`、`tools/`、`update-binary`、`phantom-package.json` 或其他条目；构建元数据必须通过 Release 附件单独提供。
+- 打包后必须检查 ZIP 完整性、`anykernel.sh` shell 语法、Image 存在且哈希正确，并逐条比较模板与成品：除 `Image` 和 `anykernel.sh` 外，其余条目内容必须完全一致；旧名称残留为零，新名称出现一次。
+- 派生包文件名仍须按对应源码提交时间追加 `YYYYMMDD-HHmm`。Release 说明必须明确这是 HoshinoNeko AnyKernel3 模板派生包，并单独说明该模板运行时的 boot 解包/重打包行为；不得将静态“只替换两个 ZIP 条目”误写成运行时“只写入内核字节”。
