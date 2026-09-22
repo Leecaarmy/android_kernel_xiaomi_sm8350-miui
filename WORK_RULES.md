@@ -42,6 +42,7 @@
 
 ## 6. HoshinoNeko AK3 模板派生打包
 
+- AK3 发布文件名固定为 `Dynamic-AK3-<内核版本>-Dynamic-g<内核源码提交前7位>-<YYYYMMDD-HHmm>.zip`，例如 `Dynamic-AK3-5.4.302-Dynamic-g14b97c7-20260921-2230.zip`；不得添加模板名称、`HoshinoNeko`、`template` 等额外字段。模板来源写入发布说明和构建清单。
 - 本节是用户于 2026-09-22 确认的后续默认打包规则；与第 4 节原安装器的机型检查及写后校验实现要求冲突时，以本节“仅替换两项”的要求为准。目标兼容范围仍为小米 11 Pro / Ultra，保留模板的 `do.devicecheck=0` 不代表其他机型获得兼容认证。实际操作手机分区仍须用户授权。
 - 固定模板 SHA-256：`590627e556f15e49f243ab692bc07246242901aed21eacfb3cf8938b151263db`；未经用户要求不得更换模板版本。
 - 用户指定使用 `HoshinoNeko_Star_Stable2_Any3Kernel.zip` 时，以该 ZIP 为唯一模板，保留其目录结构、脚本、工具、许可证、文件权限和其他条目。
