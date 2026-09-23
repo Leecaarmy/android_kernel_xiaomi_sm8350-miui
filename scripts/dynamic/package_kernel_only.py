@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Package the committed Dynamic kernel without ROM-specific boot images."""
+"""Build the Dynamic AK3 package from the approved HoshinoNeko template."""
 import datetime
+import copy
 import hashlib
 import json
 import os
@@ -11,12 +12,24 @@ import zipfile
 from zoneinfo import ZoneInfo
 
 src = Path(__file__).resolve().parents[2]
+template = Path(os.environ.get("AK3_TEMPLATE", "/mnt/c/Users/Leeze/Downloads/HoshinoNeko_Star_Stable2_Any3Kernel.zip"))
+expected_template_sha256 = "590627e556f15e49f243ab692bc07246242901aed21eacfb3cf8938b151263db"
+
 def git(*args):
     return subprocess.check_output(["git", "-C", str(src), *args], text=True).strip()
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
 if git("status", "--porcelain", "--untracked-files=normal"):
     raise SystemExit("Commit release sources before packaging")
+if not template.is_file():
+    raise SystemExit(f"AK3 template not found: {template}")
+if sha(template) != expected_template_sha256:
+    raise SystemExit("AK3 template SHA-256 does not match the approved template")
+subprocess.run(['python3', str(src/'scripts/dynamic/test_kernel_only.py')], check=True,
+               env=dict(os.environ, AK3_TEMPLATE=str(template)))
+
 commit = git("rev-parse", "HEAD")
 epoch = int(git("show", "-s", "--format=%ct", "HEAD"))
 when = datetime.datetime.fromtimestamp(epoch, ZoneInfo("Asia/Shanghai"))
@@ -25,69 +38,104 @@ release = "5.4.302-Dynamic-g" + commit[:7]
 out = Path(os.environ.get("OUT", str(src.parent / "out-dynamic-mars-a17")))
 dest = Path(os.environ.get("RELEASE_DIR", str(src.parent / ("release-" + commit[:7]))))
 dest.mkdir(parents=True, exist_ok=True)
-assert (out / "include/config/kernel.release").read_text().strip() == release
+if (out / "include/config/kernel.release").read_text().strip() != release:
+    raise SystemExit("kernel.release does not match source commit")
 build_manifest = (out / "dynamic-build-manifest.txt").read_text()
-assert "source_commit=" + commit in build_manifest
-assert sha(out / "arch/arm64/boot/Image") in build_manifest
+if "source_commit=" + commit not in build_manifest:
+    raise SystemExit("build output was not produced from HEAD")
 image_data = (out / "arch/arm64/boot/Image").read_bytes()
-assert ("Linux version " + release + " ").encode() in image_data
+if sha(out / "arch/arm64/boot/Image") not in build_manifest:
+    raise SystemExit("Image hash is missing from build manifest")
+if (b"Linux version " + release.encode() + b" ") not in image_data:
+    raise SystemExit("Image does not contain the required uname release")
+
 base = release + "-" + stamp
 image = dest / ("Image-" + base)
 config = dest / ("config-" + base)
 ak3 = dest / ("Dynamic-AK3-" + base + ".zip")
+report_path = Path(os.environ['AK3_VALIDATION_REPORT'])
+report = json.loads(report_path.read_text())
+if report['source_commit'] != commit or report['results'][0]['kernel_sha256'] != sha(out/'arch/arm64/boot/Image'):
+    raise SystemExit('Offline verification does not match the build')
+for key, name in [('ak3_core_sha256', 'tools/ak3-core.sh'), ('anykernel_sha256', 'anykernel.sh')]:
+    if report[key] != sha(src/'scripts/ak3'/name):
+        raise SystemExit(f'Offline verification does not match {name}')
+validation = dest / ('AK3Validation-' + base + '.json')
+shutil.copyfile(report_path, validation)
 shutil.copyfile(out / "arch/arm64/boot/Image", image)
 shutil.copyfile(out / ".config", config)
-entries = {
-    "Image": (image_data, 0o644),
-    "kernel.sha256": ((sha(image) + "  Image\n").encode(), 0o644),
-}
-for rel in ("anykernel.sh", "META-INF/com/google/android/update-binary",
-            "tools/kernel-only.sh", "tools/busybox", "LICENSE", "README.md"):
-    mode = 0o755 if rel.endswith(".sh") or rel.endswith("update-binary") or rel.endswith("busybox") else 0o644
-    entries[rel] = ((src / "scripts/ak3" / rel).read_bytes(), mode)
+
+with zipfile.ZipFile(template) as template_zip:
+    template_names = template_zip.namelist()
+    template_infos = {info.filename: info for info in template_zip.infolist()}
+    template_data = {name: template_zip.read(name) for name in template_names if name != 'Image'}
+    if template_names.count("Image") != 1:
+        raise SystemExit("approved template must contain exactly one root Image")
+    expected_names = set(template_names) - {"Image"}
+
+source_files = {p.relative_to(src / "scripts/ak3").as_posix(): p for p in (src / "scripts/ak3").rglob("*") if p.is_file()}
+if set(source_files) != expected_names:
+    missing = sorted(expected_names - set(source_files))
+    extra = sorted(set(source_files) - expected_names)
+    raise SystemExit(f"AK3 template entries differ; missing={missing}, extra={extra}")
+
+ak_text = (src / "scripts/ak3/anykernel.sh").read_text()
+required = ("kernel.string=Dynamic Kernel For SM8350", "do.devicecheck=1", "device.name1=mars", "device.name2=star", "device.name3=M2102K1AC", "device.name4=M2102K1G", "split_boot", "flash_boot", "patch_vbmeta_flag=0", "slot_select=active")
+if any(item not in ak_text for item in required):
+    raise SystemExit("anykernel.sh is missing the model-only/template install flow")
+if any(x in ak_text for x in ("bootloader", "getprop ro.boot.verifiedbootstate", "seek=1")):
+    raise SystemExit("anykernel.sh contains an unsupported admission or fixed-offset gate")
+for name, path in source_files.items():
+    if name != 'anykernel.sh' and path.read_bytes() != template_data[name]:
+        raise SystemExit(f'Unapproved template entry change: {name}')
+
 with zipfile.ZipFile(ak3, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-    for name, (data, mode) in sorted(entries.items()):
-        info = zipfile.ZipInfo(name, when.timetuple()[:6])
-        info.create_system = 3
-        info.external_attr = (0o100000 | mode) << 16
-        info.compress_type = zipfile.ZIP_DEFLATED
-        z.writestr(info, data)
+    image_info = copy.copy(template_infos['Image'])
+    z.writestr(image_info, image_data)
+    for name in sorted(source_files):
+        path = source_files[name]
+        info = copy.copy(template_infos[name])
+        z.writestr(info, path.read_bytes())
+
 with zipfile.ZipFile(ak3) as z:
-    assert z.testzip() is None
-    assert set(z.namelist()) == set(entries)
-    assert z.read("Image") == image_data
-    assert not any(n.startswith(("ramdisk/", "patch/", "modules/")) for n in z.namelist())
-    assert "tools/ak3-core.sh" not in z.namelist()
+    if z.testzip() is not None:
+        raise SystemExit("AK3 ZIP integrity check failed")
+    if set(z.namelist()) != set(template_names):
+        raise SystemExit("AK3 output entry set differs from approved template")
+    if z.read("Image") != image_data:
+        raise SystemExit("AK3 Image does not match compiled Image")
+    if z.read("anykernel.sh").count(b"MiYume HoshinoNeko Kernel For SM8350"):
+        raise SystemExit("old kernel title remains in AK3")
+    if z.read("anykernel.sh").count(b"Dynamic Kernel For SM8350") != 1:
+        raise SystemExit("new kernel title count is not exactly one")
+
 manifest = {
-    "author": "Dynamic", "source_commit": commit,
-    "branch": git("branch", "--show-current"), "kernel_release": release,
-    "source_commit_time": when.isoformat(), "artifact_timestamp": stamp,
-    "artifact_timezone": "Asia/Shanghai", "build_timestamp": git("show", "-s", "--format=%cD", "HEAD"),
-    "build_user": "Dynamic", "build_host": "mars",
+    "author": "Dynamic", "source_commit": commit, "branch": git("branch", "--show-current"), "kernel_release": release,
+    "source_commit_time": when.isoformat(), "artifact_timestamp": stamp, "artifact_timezone": "Asia/Shanghai",
+    "build_timestamp": git("show", "-s", "--format=%cD", "HEAD"), "build_user": "Dynamic", "build_host": "mars",
+    "build_completed_at": datetime.datetime.fromtimestamp((out/'arch/arm64/boot/Image').stat().st_mtime, ZoneInfo('Asia/Shanghai')).isoformat(),
     "compiler": subprocess.check_output(["clang-17", "--version"], text=True).splitlines()[0],
     "linker": subprocess.check_output(["ld.lld-17", "--version"], text=True).strip(),
-    "config": "vendor/mars_hyperos4_a17_defconfig + scripts/set-dynamic-version.sh",
-    "kernel_payload_bytes": len(image_data),
-    "installer": "Dynamic kernel-only AK3 layout; model admission only (mars/star); recovery or Horizon; no zygote/bootloader/layout/image/checksum admission gates; write packaged Image to active boot kernel offset",
-    "allowed_devices": ["mars", "star", "M2102K1AC", "M2102K1G"],
-    "files": {p.name: sha(p) for p in (image, config, ak3)},
+    "config": "vendor/mars_hyperos4_a17_defconfig + scripts/set-dynamic-version.sh", "kernel_payload_bytes": len(image_data),
+    "installer": "HoshinoNeko AnyKernel3 template; model admission only; split_boot/flash_boot preserves existing ramdisk cpio without rebuilding its filesystem; active slot; vbmeta flag patching disabled; no recovery/bootloader/Android-version/equal-kernel-size policy gate",
+    "allowed_devices": ["mars", "star", "M2102K1AC", "M2102K1G"], "template": str(template), "template_sha256": expected_template_sha256,
+    "files": {p.name: sha(p) for p in (image, config, ak3, validation)},
 }
 manifest_file = dest / ("dynamic-build-manifest-" + stamp + ".json")
 manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
 notes = (src / "Documentation/dynamic-a17-fixes-zh.md").read_text()
-notes += "\n## 本次构建与校验\n\n"
-notes += "- 源码提交：`" + commit + "`\n- 分支：`" + manifest["branch"] + "`\n"
-notes += "- uname：`" + release + "`\n- 源码提交/构建时间戳：`" + when.isoformat() + "`\n"
-notes += "- 工具链：" + manifest["compiler"] + "；" + manifest["linker"] + "\n"
-notes += "- 配置：`" + manifest["config"] + "`\n- 内核载荷长度：" + str(len(image_data)) + " 字节\n"
-notes += "- 构建署名：`Dynamic@mars`；版本计数：1。文件名时间取源码提交时间，时区 Asia/Shanghai。\n\n"
+notes += "\n## 本次构建与 AK3 安装器校验\n\n"
+notes += f"- 源码提交：`{commit}`\n- 分支：`{manifest['branch']}`\n- uname：`{release}`\n- 源码提交/构建时间戳：`{when.isoformat()}`\n"
+notes += f"- 工具链：{manifest['compiler']}；{manifest['linker']}\n- 配置：`{manifest['config']}`\n- 内核载荷长度：{len(image_data)} 字节\n"
+notes += "- AK3 来源：已批准的 HoshinoNeko_Star_Stable2_Any3Kernel.zip；运行时使用其 `split_boot`/`flash_boot`，保留原 ramdisk cpio 的文件与元数据，跳过 ramdisk 文件解包/重建，只替换 kernel payload 并重新封装 boot。\n"
+notes += "- 唯一准入检查：`mars`/`star`/`M2102K1AC`/`M2102K1G`；不增加 Recovery、Bootloader、系统版本或其他环境拦截。\n\n"
+notes += f"- 实际 Image 构建完成时间：`{manifest['build_completed_at']}`；内核内嵌时间及附件名称取提交时间。\n"
+notes += '- 离线验证：32 组机型准入；.26 原 boot 配合当前 Image 与 ±8 KiB 大小布局样本，ramdisk cpio 字节、893 个文件条目及启动参数保持一致。测试写入只发生于本机临时文件，没有刷写手机；详见 AK3Validation 附件。\n\n'
 notes += "| 文件 | SHA-256 |\n| --- | --- |\n"
-for p in (image, ak3, config, manifest_file):
-    notes += "| `" + p.name + "` | `" + sha(p) + "` |\n"
+for p in (image, ak3, config, validation, manifest_file):
+    notes += f"| `{p.name}` | `{sha(p)}` |\n"
 notes_file = dest / ("ReleaseNotes-" + base + ".md")
 notes_file.write_text(notes)
 sums = dest / ("SHA256SUMS-" + stamp + ".txt")
-sums.write_text("".join(sha(p) + "  " + p.name + "\n" for p in (image, ak3, config, manifest_file, notes_file)))
-print(json.dumps({"release_dir": str(dest), "tag": "dynamic-kernel-g" + commit[:7],
-                  "source_commit": commit, "kernel_release": release,
-                  "stamp": stamp, "files": [p.name for p in (image, ak3, config, manifest_file, notes_file, sums)]}, indent=2))
+sums.write_text("".join(sha(p) + "  " + p.name + "\n" for p in (image, ak3, config, validation, manifest_file, notes_file)))
+print(json.dumps({"release_dir": str(dest), "tag": "dynamic-kernel-g" + commit[:7], "source_commit": commit, "kernel_release": release, "stamp": stamp, "files": [p.name for p in (image, ak3, config, validation, manifest_file, notes_file, sums)]}, indent=2))

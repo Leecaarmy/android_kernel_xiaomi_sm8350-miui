@@ -1,89 +1,63 @@
 #!/usr/bin/env python3
-"""Exercise actual shell prepare/guard logic against disposable boot fixtures."""
+"""Audit template fidelity and execute the actual model admission function."""
 import hashlib
+import os
 from pathlib import Path
-import struct
 import subprocess
 import tempfile
+import zipfile
+
 src = Path(__file__).resolve().parents[2]
-core = src / "scripts/ak3/tools/kernel-only.sh"
-def run(original, kernel, output):
-    return subprocess.run(["bash", "-c", 'set -e; . "$1"; prepare_kernel "$2" "$3" "$4"',
-                           "test", str(core), str(original), str(kernel), str(output)], capture_output=True)
-with tempfile.TemporaryDirectory(prefix="dynamic-ak3-test-") as tmp:
-    root = Path(tmp)
-    kernel = bytearray(b"K" * 8192)
-    kernel[56:60] = b"ARM\x64"
-    header = bytearray(b"H" * 4096)
-    header[:8] = b"ANDROID!"
-    for offset, value in ((8, len(kernel)), (12, 3000), (20, 1580), (40, 3)):
-        struct.pack_into("<I", header, offset, value)
-    original = bytes(header) + b"O" * 8192 + b"R" * 4096 + b"AVB-and-tail-preserved" * 128
-    boot, image, result = root / "boot", root / "Image", root / "result"
-    boot.write_bytes(original); image.write_bytes(kernel)
-    assert run(boot, image, result).returncode == 0
-    expected = original[:4096] + bytes(kernel) + original[12288:]
-    assert result.read_bytes() == expected
-    assert boot.read_bytes() == original
-    print("PASS: exact replacement; header, ramdisk, tail and original file preserved")
-    for label, offset, value in (("wrong version", 40, 4), ("wrong header size", 20, 1600),
-                                  ("kernel length mismatch", 8, 12288), ("truncated ramdisk", 12, 999999)):
-        bad = bytearray(original); struct.pack_into("<I", bad, offset, value)
-        boot.write_bytes(bad); result.unlink(missing_ok=True)
-        assert run(boot, image, result).returncode != 0
-        assert not result.exists() and boot.read_bytes() == bad
-        print("PASS: rejected " + label + " before output creation")
-    for label, bad in (("bad boot magic", b"BADMAGIC" + original[8:]), ("short header", b"ANDROID!")):
-        boot.write_bytes(bad); assert run(boot, image, result).returncode != 0
-        assert not result.exists()
-        print("PASS: rejected " + label)
-    boot.write_bytes(original); image.write_bytes(b"N" * len(kernel))
-    assert run(boot, image, result).returncode != 0 and not result.exists()
-    print("PASS: rejected non-ARM64 Image")
-for device in ("mars", "star", "M2102K1AC", "M2102K1G", "venus", "alioth", "", "mars-extra"):
-    r = subprocess.run(["bash", "-c", '. "$1"; is_supported_device "$2"', "test", str(core), device])
-    assert (r.returncode == 0) == (device in ("mars", "star", "M2102K1AC", "M2102K1G"))
-print("PASS: device whitelist admits only specified identifiers")
-# Stop at slot resolution before any block device access. A running zygote and
-# locked-state properties must not prevent supported devices reaching this guard.
-with tempfile.TemporaryDirectory(prefix="dynamic-ak3-admission-") as tmp:
-    import os
-    root = Path(tmp)
-    props = root / "getprop"
-    props.write_text('''#!/bin/sh
-echo "$1" >> "$PROP_LOG"
-case "$1" in
-  ro.product.device) printf '%s\\n' "$TEST_DEVICE";;
-  ro.boot.flash.locked) echo 1;;
-  ro.boot.verifiedbootstate) echo green;;
-esac
-''')
-    props.chmod(0o755)
-    ps = root / "ps"
-    ps.write_text('#!/bin/sh\necho "123 zygote64"\necho "456 zygote"\n')
-    ps.chmod(0o755)
-    for device in ("mars", "star", "M2102K1AC", "M2102K1G", "venus", "alioth", ""):
-        log = root / "properties.log"
-        log.write_text("")
-        env = dict(os.environ, PATH=str(root) + ":" + os.environ["PATH"],
-                   TEST_DEVICE=device, PROP_LOG=str(log))
-        r = subprocess.run(["bash", str(src / "scripts/ak3/anykernel.sh"), "1",
-                            str(src / "scripts/ak3")], env=env, capture_output=True, text=True)
-        assert r.returncode != 0
-        expected = "Cannot determine current slot" if device in ("mars", "star", "M2102K1AC", "M2102K1G") else "Unsupported device"
-        assert expected in r.stdout, (device, r.stdout, r.stderr)
-        assert "ro.boot.flash.locked" not in log.read_text()
-        assert "ro.boot.verifiedbootstate" not in log.read_text()
-        assert "Writing only" not in r.stdout
-    print("PASS: Android/Horizon admission; no bootloader-state gate; whitelist and slot guard preserved")
-# Real saved-device image: exercise the identical preparation logic when supplied.
-import sys
-if len(sys.argv) == 3:
-    with tempfile.TemporaryDirectory(prefix="dynamic-ak3-real-") as tmp:
-        output = Path(tmp) / "boot-expected.img"
-        original, kernel = map(Path, sys.argv[1:])
-        r = run(original, kernel, output)
-        assert r.returncode == 0, r.stderr.decode()
-        old, new, k = original.read_bytes(), output.read_bytes(), kernel.read_bytes()
-        assert new == old[:4096] + k + old[4096+len(k):]
-        print("PASS: saved real boot image; output SHA256=" + hashlib.sha256(new).hexdigest())
+folder = src / 'scripts/ak3'
+template = Path(os.environ.get('AK3_TEMPLATE', '/mnt/c/Users/Leeze/Downloads/HoshinoNeko_Star_Stable2_Any3Kernel.zip'))
+assert hashlib.sha256(template.read_bytes()).hexdigest() == '590627e556f15e49f243ab692bc07246242901aed21eacfb3cf8938b151263db'
+with zipfile.ZipFile(template) as z:
+    assert z.testzip() is None
+    expected = z.read('anykernel.sh')
+    replacements = {
+        b'kernel.string=MiYume HoshinoNeko Kernel For SM8350': b'kernel.string=Dynamic Kernel For SM8350',
+        b'do.devicecheck=0': b'do.devicecheck=1',
+        b'device.name1=star': b'device.name1=mars',
+        b'device.name2=\n': b'device.name2=star\n',
+        b'device.name3=\n': b'device.name3=M2102K1AC\n',
+        b'device.name4=\n': b'device.name4=M2102K1G\n',
+        b'patch_vbmeta_flag=auto': b'patch_vbmeta_flag=0\nslot_select=active',
+        b'dump_boot\nwrite_boot': b'# Replace the kernel without extracting/rebuilding the existing ramdisk cpio.\nsplit_boot\nflash_boot',
+    }
+    for before, after in replacements.items():
+        assert expected.count(before) == 1, before
+        expected = expected.replace(before, after)
+    actual = {p.relative_to(folder).as_posix() for p in folder.rglob('*') if p.is_file()}
+    assert actual == set(z.namelist()) - {'Image'}
+    for name in actual:
+        assert (folder/name).read_bytes() == (expected if name == 'anykernel.sh' else z.read(name)), name
+print('PASS: exact approved template contents; only documented anykernel.sh edits')
+for name in ['anykernel.sh', 'tools/ak3-core.sh', 'META-INF/com/google/android/update-binary']:
+    subprocess.run(['bash', '-n', str(folder/name)], check=True)
+
+entry = (folder/'META-INF/com/google/android/update-binary').read_text()
+function = entry[entry.index('do_devicecheck() {'):entry.index('int2ver() {')]
+with tempfile.TemporaryDirectory(prefix='ak3-admission-') as temp:
+    test = Path(temp)/'check.sh'
+    test.write_text('''#!/bin/bash
+cd "$1"
+file_getprop() { grep "^$2=" "$1" | tail -n1 | cut -d= -f2-; }
+ui_print() { printf '%s\\n' "$*"; }
+abort() { ui_print "$@"; exit 1; }
+getprop() {
+  case "$1" in
+    ro.product.device|ro.build.product|ro.product.vendor.device|ro.vendor.product.device)
+      [ "$1" = "$TEST_PROPERTY" ] && printf '%s\\n' "$TEST_DEVICE";;
+    *) echo "Unexpected admission property: $1" >&2; exit 99;;
+  esac
+}
+''' + function + '\ndo_devicecheck\n')
+    devices = ['mars','star','M2102K1AC','M2102K1G','venus','alioth','mars-extra','']
+    for prop in ['ro.product.device','ro.build.product','ro.product.vendor.device','ro.vendor.product.device']:
+        for device in devices:
+            env = dict(os.environ, TEST_PROPERTY=prop, TEST_DEVICE=device)
+            result = subprocess.run(['bash', str(test), str(folder)], env=env, capture_output=True, text=True)
+            assert (result.returncode == 0) == (device in devices[:4]), (prop,device,result.stdout,result.stderr)
+            assert not result.stderr, result.stderr
+print('PASS: 32 model admission cases; only four device properties queried')
+print('PASS: shell syntax; no device partitions accessed')

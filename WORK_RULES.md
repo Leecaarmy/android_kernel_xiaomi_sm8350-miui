@@ -26,7 +26,7 @@
 - 上传至 GitHub Releases 的文件，必须在文件名末尾（扩展名前）附加对应源码提交的日期与时间，精确到分钟，格式为 `YYYYMMDD-HHmm`；时间取对应源码提交时间。
 - Release 必须包含 Image 内核镜像和 AK3 内核刷机包。
 - AK3 刷机包的设备检查必须限制为小米 11 Pro（`mars` / `M2102K1AC`）和小米 11 Ultra（`star` / `M2102K1G`，以源码及设备树实际标识为准）两款机型；不得无条件放宽到其他机型。
-- AK3 允许由 Horizon Kernel Flasher 在 Android 系统内执行，也允许 recovery 安装；不得增加 recovery 环境或 Bootloader 状态准入拦截。保留槽位定位、boot 格式及内核长度边界、Image 完整性和写后读回校验，以确保只替换内核、不修改 ramdisk 或启动配置。
+- AK3 刷入准入只验证小米 11 Pro / Ultra 机型（`mars` / `star` / `M2102K1AC` / `M2102K1G`）。允许 Horizon Kernel Flasher 或 recovery 执行；不得增加 Recovery、Bootloader、系统版本、内核长度或其他环境拦截。安装器使用模板已有的 `split_boot/flash_boot` 进行 boot 解包/重打包，只替换 kernel payload；不调用会重建 ramdisk 的 `dump_boot/write_boot`，不注入或修改 ramdisk 文件及启动配置。保留读取/解包/写入失败和分区容量不足时的正常错误处理，这些不属于人为兼容准入限制。
 - Release 必须详细记录内核构建信息，包括源码提交、分支、编译时间、工具链、配置、`uname -r`、产物哈希和打包方式。
 - Release 必须记录当前版本新增的功能、修复的 bug、已有功能或兼容实现，以及适配的系统版本和机型。
 - 发布前必须核对源码提交、Image、AK3 包和 Release 说明之间的版本、提交短哈希和哈希值一致。
@@ -43,10 +43,10 @@
 ## 6. HoshinoNeko AK3 模板派生打包
 
 - AK3 发布文件名固定为 `Dynamic-AK3-<内核版本>-Dynamic-g<内核源码提交前7位>-<YYYYMMDD-HHmm>.zip`，例如 `Dynamic-AK3-5.4.302-Dynamic-g14b97c7-20260921-2230.zip`；不得添加模板名称、`HoshinoNeko`、`template` 等额外字段。模板来源写入发布说明和构建清单。
-- 本节是用户于 2026-09-22 确认的后续默认打包规则；与第 4 节原安装器的机型检查及写后校验实现要求冲突时，以本节“仅替换两项”的要求为准。目标兼容范围仍为小米 11 Pro / Ultra，保留模板的 `do.devicecheck=0` 不代表其他机型获得兼容认证。实际操作手机分区仍须用户授权。
+- 本节是用户于 2026-09-22 确认的后续默认打包规则；目标兼容范围为小米 11 Pro / Ultra，安装器只保留机型准入检查，不增加 Recovery、Bootloader 或其他环境限制。实际操作手机分区仍须用户授权。
 - 固定模板 SHA-256：`590627e556f15e49f243ab692bc07246242901aed21eacfb3cf8938b151263db`；未经用户要求不得更换模板版本。
 - 用户指定使用 `HoshinoNeko_Star_Stable2_Any3Kernel.zip` 时，以该 ZIP 为唯一模板，保留其目录结构、脚本、工具、许可证、文件权限和其他条目。
-- 模板派生包只替换 ZIP 根目录的 `Image`，以及 `anykernel.sh` 中精确的内核显示名称：`MiYume HoshinoNeko Kernel For SM8350` 替换为 `Dynamic Kernel For SM8350`。
+- 模板派生包替换 ZIP 根目录的 `Image`，将 `anykernel.sh` 中的内核显示名称替换为 `Dynamic Kernel For SM8350`，并增加两款机型的准入列表（`mars` / `star` / `M2102K1AC` / `M2102K1G`）。为满足仅替换内核，`anykernel.sh` 使用 `split_boot/flash_boot` 保留 ramdisk cpio；设置 `patch_vbmeta_flag=0` 和 `slot_select=active`，避免修改 AVB 标志或在 OTA 环境自动选择其他槽位。
 - 不得借模板派生过程顺带修改 `ramdisk/`、`patch/`、`modules/`、`tools/`、`update-binary`、`phantom-package.json` 或其他条目；构建元数据必须通过 Release 附件单独提供。
 - 打包后必须检查 ZIP 完整性、`anykernel.sh` shell 语法、Image 存在且哈希正确，并逐条比较模板与成品：除 `Image` 和 `anykernel.sh` 外，其余条目内容必须完全一致；旧名称残留为零，新名称出现一次。
 - 派生包文件名仍须按对应源码提交时间追加 `YYYYMMDD-HHmm`。Release 说明必须明确这是 HoshinoNeko AnyKernel3 模板派生包，并单独说明该模板运行时的 boot 解包/重打包行为；不得将静态“只替换两个 ZIP 条目”误写成运行时“只写入内核字节”。
