@@ -18,7 +18,7 @@
 
 ### Horizon 安装入口
 
-取消运行中 zygote/recovery 环境与 Bootloader 状态拦截，机型兼容准入仅限小米 11 Pro / Ultra。Horizon 通过 Android sh 调用 update-binary；当 /tmp 不存在或不可写时，使用 /dev 中独立临时目录，不挂载其他目录。槽位、boot 布局、内核长度、Image 校验和写后比对继续保留，确保不改 ramdisk 或启动配置。
+取消运行中 zygote/recovery 环境与 Bootloader 状态拦截，机型兼容准入仅限小米 11 Pro / Ultra。Horizon 通过 Android sh 调用 update-binary；当 /tmp 不存在或不可写时，使用 /dev 中独立临时目录，不挂载其他目录。按用户后续规则，AK3 安装器只做机型验证并把 Image 写入当前活动槽位的 boot 内核位置，不再增加 boot 布局、内核长度、Image 格式、校验和或其他状态拦截。
 
 ## 保留的修复
 
@@ -71,9 +71,9 @@
 
 AK3 使用 AnyKernel3 recovery ZIP 布局及原有 BusyBox，采用 Dynamic 的最小安装入口，不运行旧版 AK3 的 ramdisk 解包/重打或 vbmeta 修补流程。第三方许可证和署名保留。
 
-**允许 recovery 或 Horizon Kernel Flasher 执行，不再根据 zygote 或 Bootloader 状态拦截。机型准入仅限上述 Pro / Ultra 标识。仍要求当前槽位可确定、boot header 为 v3，且原 boot 的 kernel_size 与包内 Image 的字节长度完全一致；这些写入目标与边界检查不符时，在写入前退出。**
+**允许 recovery 或 Horizon Kernel Flasher 执行，不再根据 zygote、Bootloader 状态、boot header、kernel_size、Image 格式或其他布局条件拦截。AK3 只验证上述 Pro / Ultra 机型，然后将包内 Image 写入当前活动槽位的 boot 内核位置。**
 
-包内只含 Image、校验值、最小安装脚本、BusyBox 和许可证/说明；不含 ramdisk/、patch/、modules/、DTB/DTBO 或完整 boot。读取当前 boot 后，在安装器 /tmp 或 /dev 临时工作目录构造预期镜像并确认所有非内核字节不变；实际仅从偏移 4096 写入内核长度的字节，之后完整读回比对。保留 ramdisk、cmdline、完整启动头和尾部，包括原 AVB 元数据；原 AVB 摘要不会重新签名，取消 Bootloader 状态检查并不表示产物能通过锁定设备的启动验证。
+包内只含 Image、校验值、最小安装脚本、BusyBox 和许可证/说明；不含 ramdisk/、patch/、modules/、DTB/DTBO 或完整 boot。安装器不主动修改这些组件，但也不再以 boot 布局或长度条件拒绝用户指定的 Image。取消 Bootloader 状态检查只表示安装器不拦截该状态，不表示设备会绕过自身的启动验证。
 
 只写当前槽位的 boot 内核区域，不挂载或修改其他分区、不切换槽位、不清数据、不自动重启。失败时原始 boot 临时备份保留在报告的 /tmp/dynamic-ak3.* 或 /dev/dynamic-ak3.* 路径，可能被安装器清理或在重启后消失；不能把它视为持久备份。
 
