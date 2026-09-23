@@ -61,6 +61,12 @@
 
 ## AK3 打包与安装限制
 
+## 调度统计默认开关
+
+保留 `CONFIG_SCHEDSTATS=y`，使 `/proc/schedstat` 和 `/proc/<pid>/schedstat` 在需要诊断时仍可用；运行时统计默认关闭。mars 和 star 的 ARM64 defconfig 内置 `schedstats=disable`，内核仍接受 `kernel.sched_schedstats=1` 或启动参数 `schedstats=enable` 进行临时分析。
+
+该改动只调整调度统计的默认开关，不删除统计实现，也不改变调度策略。官方文档说明这些字段是持续累加的调度计数器，启用会在调度路径保留额外统计开销，详见 [Scheduler Statistics](https://docs.kernel.org/scheduler/sched-stats.html)。本机当前系统的 `/proc/sys/kernel/sched_schedstats` 曾由启动后的系统设置为 `1`；内核启动参数只能设定初始值，若 ROM 后续写入 `1`，仍需从系统启动配置移除该写入才能让运行时始终保持关闭。
+
 发布包含 Image 和 Dynamic AK3 刷机包，另附配置、构建清单、说明和 SHA-256。文件名时间统一取源码提交时间，精确到分钟，Asia/Shanghai。此版本不提供基于特定 ROM 的完整 boot 镜像。
 
 AK3 使用 AnyKernel3 recovery ZIP 布局及原有 BusyBox，采用 Dynamic 的最小安装入口，不运行旧版 AK3 的 ramdisk 解包/重打或 vbmeta 修补流程。第三方许可证和署名保留。
