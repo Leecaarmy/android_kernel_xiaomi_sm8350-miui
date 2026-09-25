@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='dynamic-ak3-offline-') as temp:
     binpath.mkdir()
     magisk = SRC / 'scripts/ak3/tools/magiskboot'
     wrapper = binpath / 'magiskboot'
-    wrapper.write_text(f'#!/bin/sh\nexec {QEMU} {magisk} "$@"\n')
+    wrapper.write_text(f'#!/bin/sh\nif [ "${{AK3_TEST_FAIL_REPACK:-0}}" = 1 ] && [ "$1" = repack ]; then exit 86; fi\nexec {QEMU} {magisk} "$@"\n')
     wrapper.chmod(0o755)
     env = dict(os.environ, PATH=str(binpath) + ':' + os.environ['PATH'])
     core = (SRC / 'scripts/ak3/tools/ak3-core.sh').read_text()
@@ -130,6 +130,26 @@ flash_boot
                         'ramdisk_cpio_bytes_equal': True,
                         'header_parameters_equal': True, 'output_boot_sha256': digest(new)})
         print('PASS', label, len(image), 'ramdisk entries', len(before_cpio))
+    failure_results = []
+    for label, invalid_boot, fail_repack in [('invalid-boot', True, False), ('repack-failure', False, True)]:
+        failed_dir = root / label
+        failed_dir.mkdir()
+        (failed_dir / 'tools').mkdir()
+        (failed_dir / 'Image').write_bytes(base_image)
+        failed_block = failed_dir / 'mock-boot-partition'
+        failed_input = b'INVALID!' + b'\0' * 4088 if invalid_boot else original
+        failed_block.write_bytes(failed_input)
+        failed_run = failed_dir / 'run.sh'
+        failed_run.write_text(run.read_text())
+        fault_env = dict(env, AK3_TEST_FAIL_REPACK='1' if fail_repack else '0')
+        proc = subprocess.run(['bash', str(failed_run), str(failed_dir), str(core_file)],
+                              env=fault_env, capture_output=True, text=True, timeout=90)
+        assert proc.returncode != 0, label
+        assert failed_block.read_bytes() == failed_input, label + ': target was modified'
+        assert not (failed_dir / 'boot-new.img').exists(), label + ': partial output remained'
+        failure_results.append({'case': label, 'rejected': True, 'mock_target_unchanged': True,
+                                'no_partial_repacked_image': True})
+        print('PASS', label, 'aborted before writing; no partial repacked image')
     assert digest(ROM.read_bytes()) == original_hash
     EVIDENCE.write_text(json.dumps({'rom': str(ROM), 'rom_sha256': original_hash,
                                    'source_commit': subprocess.check_output(['git', '-C', str(SRC), 'rev-parse', 'HEAD'], text=True).strip(),
@@ -137,5 +157,6 @@ flash_boot
                                    'ak3_core_sha256': digest((SRC/'scripts/ak3/tools/ak3-core.sh').read_bytes()),
                                    'anykernel_sha256': digest((SRC/'scripts/ak3/anykernel.sh').read_bytes()),
                                    'method': 'unchanged AK3 core split_boot/flash_boot; bundled ARM magiskboot through QEMU; block writes mocked to disposable files',
-                                   'physical_device_access': False, 'results': results}, indent=2)+'\n')
+                                   'physical_device_access': False, 'input_boot_unchanged': True,
+                                   'failure_results': failure_results, 'results': results}, indent=2)+'\n')
     print('Evidence:', EVIDENCE)

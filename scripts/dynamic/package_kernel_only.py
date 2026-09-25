@@ -67,6 +67,7 @@ shutil.copyfile(out / ".config", config)
 
 with zipfile.ZipFile(template) as template_zip:
     template_names = template_zip.namelist()
+    template_comment = template_zip.comment
     template_infos = {info.filename: info for info in template_zip.infolist()}
     template_data = {name: template_zip.read(name) for name in template_names if name != 'Image'}
     if template_names.count("Image") != 1:
@@ -90,18 +91,23 @@ for name, path in source_files.items():
         raise SystemExit(f'Unapproved template entry change: {name}')
 
 with zipfile.ZipFile(ak3, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-    image_info = copy.copy(template_infos['Image'])
-    z.writestr(image_info, image_data)
-    for name in sorted(source_files):
-        path = source_files[name]
+    z.comment = template_comment
+    for name in template_names:
         info = copy.copy(template_infos[name])
-        z.writestr(info, path.read_bytes())
+        data = image_data if name == 'Image' else source_files[name].read_bytes()
+        z.writestr(info, data)
 
 with zipfile.ZipFile(ak3) as z:
     if z.testzip() is not None:
         raise SystemExit("AK3 ZIP integrity check failed")
-    if set(z.namelist()) != set(template_names):
-        raise SystemExit("AK3 output entry set differs from approved template")
+    if z.namelist() != template_names or z.comment != template_comment:
+        raise SystemExit("AK3 output entry order/comment differs from approved template")
+    for info in z.infolist():
+        original = template_infos[info.filename]
+        for field in ('date_time', 'compress_type', 'create_system', 'create_version',
+                      'extract_version', 'internal_attr', 'external_attr', 'comment', 'extra'):
+            if getattr(info, field) != getattr(original, field):
+                raise SystemExit(f'AK3 template metadata differs: {info.filename}: {field}')
     if z.read("Image") != image_data:
         raise SystemExit("AK3 Image does not match compiled Image")
     if z.read("anykernel.sh").count(b"MiYume HoshinoNeko Kernel For SM8350"):
